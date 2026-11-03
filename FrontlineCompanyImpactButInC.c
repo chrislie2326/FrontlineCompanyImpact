@@ -1,4 +1,3 @@
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -104,13 +103,63 @@ void GirlsFrontline()
     printf("\n");
 }
 
+const char *weightedPull(const char *pool[],
+                         const int rates[],
+                         int count)
+{
+    int totalWeight = 0;
+
+    // Calculate the total probability weight.
+    for (int i = 0; i < count; i++)
+    {
+        if (rates[i] > 0)
+            totalWeight += rates[i];
+    }
+
+    if (totalWeight <= 0)
+        return NULL;
+
+    // Generate a random number within the total weight.
+    int roll = rand() % totalWeight;
+
+    // Determine which character corresponds to the roll.
+    for (int i = 0; i < count; i++)
+    {
+        if (rates[i] <= 0)
+            continue;
+
+        if (roll < rates[i])
+            return pool[i];
+
+        roll -= rates[i];
+    }
+
+    return NULL;
+}
+
+
 void GenshinImpact()
 {
-    char *DPS[4] = {"Hu Tao", "Wanderer", "Mavuika", "Flins"};
-    char *Sub_DPS[4] = {"Kaeya", "Yelan", "Ineffa", "Traveler"};
-    char *Sup[4] = {"Bennett", "Nicole", "Durin", "Columbina"};
-    char *Sus[4] = {"Barbara", "Kokomi", "Zhongli", "Furina"};
-    char *Squad[4] = {NULL};
+    const char *DPS[4] = {
+        "Hu Tao", "Wanderer", "Mavuika", "Flins"
+    };
+
+    const char *Sub_DPS[4] = {
+        "Kaeya", "Yelan", "Ineffa", "Traveler"
+    };
+
+    const char *Sup[4] = {
+        "Bennett", "Nicole", "Durin", "Columbina"
+    };
+
+    const char *Sus[4] = {
+        "Barbara", "Kokomi", "Zhongli", "Furina"
+    };
+
+    // Drop rates correspond to array positions.
+    const int dropRates[4] = {40, 30, 20, 10};
+
+    const char *Squad[4] = {NULL};
     int Gacha[4] = {0};
     int Choice;
     bool Repeat;
@@ -121,8 +170,8 @@ void GenshinImpact()
     printf("Support\n");
     printf("Sustain\n");
 
-    //Selection for Units
-    for (int i = 0; i <= 3; i++)
+    // Selection for Units
+    for (int i = 0; i < 4; i++)
     {
         printf("Selected Unit: ");
         scanf("%d", &Choice);
@@ -137,8 +186,8 @@ void GenshinImpact()
         printf("Slots Filled %d/4\n", i + 1);
     }
 
-    //Gacha
-    for (int i = 0; i <= 3; i++)
+    // Gacha
+    for (int i = 0; i < 4; i++)
     {
         do
         {
@@ -146,50 +195,49 @@ void GenshinImpact()
 
             if (Gacha[i] == 1)
             {
-                Squad[i] = DPS[rand() % 4];
+                Squad[i] = weightedPull(DPS, dropRates, 4);
             }
             else if (Gacha[i] == 2)
             {
-                Squad[i] = Sub_DPS[rand() % 4];
+                Squad[i] = weightedPull(Sub_DPS, dropRates, 4);
             }
             else if (Gacha[i] == 3)
             {
-                Squad[i] = Sup[rand() % 4];
+                Squad[i] = weightedPull(Sup, dropRates, 4);
             }
             else
             {
-                Squad[i] = Sus[rand() % 4];
+                Squad[i] = weightedPull(Sus, dropRates, 4);
             }
 
+            // Prevent duplicate characters.
             for (int j = 0; j < i; j++)
             {
                 if (strcmp(Squad[j], Squad[i]) == 0)
                 {
                     Repeat = true;
+                    break;
                 }
             }
 
         } while (Repeat);
     }
 
-    //Show Gacha
+    // Show Gacha
     printf("\nCongratulations!\n");
     printf("Your Units are: ");
 
-    for (int i = 0; i <= 3; i++)
+    for (int i = 0; i < 4; i++)
     {
+        printf("%s", Squad[i]);
+
         if (i < 3)
-        {
-            printf("%s, ", Squad[i]);
-        }
-        else
-        {
-            printf("%s", Squad[i]);
-        }
+            printf(", ");
     }
 
     printf("\n");
 }
+
 
 void LimbusCompany()
 {
