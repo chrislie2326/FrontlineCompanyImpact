@@ -4,6 +4,336 @@
 #include <time.h>
 #include <stdbool.h>
 
+const char *weightedPull(const char *pool[],
+                         const int rates[],
+                         int count)
+{
+    int totalWeight = 0;
+
+    // Calculate the total probability weight.
+    for (int i = 0; i < count; i++)
+    {
+        if (rates[i] > 0)
+            totalWeight += rates[i];
+    }
+
+    if (totalWeight <= 0)
+        return NULL;
+
+    // Generate a random number within the total weight.
+    int roll = rand() % totalWeight;
+
+    // Determine which character corresponds to the roll.
+    for (int i = 0; i < count; i++)
+    {
+        if (rates[i] <= 0)
+            continue;
+
+        if (roll < rates[i])
+            return pool[i];
+
+        roll -= rates[i];
+    }
+
+    return NULL;
+}
+
+#define TEAM_SIZE 4
+#define MAX_HP 1000
+
+typedef enum
+{
+    DPS = 1,
+    SUB_DPS,
+    SUPPORT,
+    SUSTAIN
+} Role;
+
+typedef struct
+{
+    const char *name;
+    Role role;
+    int hp;
+    bool skillUsed;
+} Unit;
+
+typedef struct
+{
+    const char *name;
+    Unit units[TEAM_SIZE];
+    int damageBuffAttacks;
+} Player;
+
+
+// Safely read an integer within a specified range.
+static int readIntRange(const char *prompt, int min, int max)
+{
+    int value;
+    int result;
+    int ch;
+
+    while (1)
+    {
+        printf("%s", prompt);
+        result = scanf("%d", &value);
+
+        if (result == EOF)
+        {
+            printf("\nInput ended. Exiting.\n");
+            exit(EXIT_FAILURE);
+        }
+
+        // Clear the remaining input from the line.
+        while ((ch = getchar()) != '\n' && ch != EOF)
+        {
+        }
+
+        if (result == 1 && value >= min && value <= max)
+            return value;
+
+        printf("Invalid input. Enter a number from %d to %d.\n",
+               min, max);
+    }
+}
+
+// Return the name of a character's role.
+static const char *getRoleName(Role role)
+{
+    switch (role)
+    {
+        case DPS:      return "DPS";
+        case SUB_DPS:  return "Sub-DPS";
+        case SUPPORT:  return "Support";
+        case SUSTAIN:  return "Sustain";
+        default:       return "Unknown";
+    }
+}
+
+// Weighted character selection without duplicates within a team.
+static const char *weightedPullUnique(
+    const char *const pool[],
+    const int weights[],
+    int count,
+    const Unit team[],
+    int teamCount)
+{
+    int availableWeights[TEAM_SIZE];
+    int totalWeight = 0;
+
+    for (int i = 0; i < count; i++)
+    {
+        bool duplicate = false;
+
+        for (int j = 0; j < teamCount; j++)
+        {
+            if (strcmp(pool[i], team[j].name) == 0)
+            {
+                duplicate = true;
+                break;
+            }
+        }
+
+        availableWeights[i] = duplicate ? 0 : weights[i];
+        totalWeight += availableWeights[i];
+    }
+
+    if (totalWeight <= 0)
+        return NULL;
+
+    int roll = rand() % totalWeight;
+
+    for (int i = 0; i < count; i++)
+    {
+        if (availableWeights[i] <= 0)
+            continue;
+
+        if (roll < availableWeights[i])
+            return pool[i];
+
+        roll -= availableWeights[i];
+    }
+
+    return NULL;
+}
+
+// Display a player's team.
+static void printTeam(const Player *player)
+{
+    printf("\n========== %s ==========\n", player->name);
+
+    for (int i = 0; i < TEAM_SIZE; i++)
+    {
+        printf("%d. %-14s | %-8s | HP: %4d/%d | Skill: %s\n",
+               i + 1,
+               player->units[i].name,
+               getRoleName(player->units[i].role),
+               player->units[i].hp,
+               MAX_HP,
+               player->units[i].skillUsed ? "USED" : "READY");
+    }
+
+    printf("Remaining damage buff attacks: %d\n",
+           player->damageBuffAttacks);
+}
+
+// Check whether a player still has living characters.
+static bool hasLivingUnits(const Player *player)
+{
+    for (int i = 0; i < TEAM_SIZE; i++)
+    {
+        if (player->units[i].hp > 0)
+            return true;
+    }
+
+    return false;
+}
+
+// Select a living character from the active player's team.
+static int chooseLivingUnit(Player *player)
+{
+    while (1)
+    {
+        printf("\nSelect one of your characters:\n");
+
+        for (int i = 0; i < TEAM_SIZE; i++)
+        {
+            printf("%d. %s - HP: %d/%d",
+                   i + 1,
+                   player->units[i].name,
+                   player->units[i].hp,
+                   MAX_HP);
+
+            if (player->units[i].hp <= 0)
+                printf(" [DEFEATED]");
+
+            printf("\n");
+        }
+
+        int choice = readIntRange("Choose unit: ", 1, TEAM_SIZE);
+
+        if (player->units[choice - 1].hp > 0)
+            return choice - 1;
+
+        printf("That character has been defeated!\n");
+    }
+}
+
+// Select a living enemy character.
+static int chooseLivingTarget(Player *opponent)
+{
+    while (1)
+    {
+        printf("\nSelect an enemy target:\n");
+
+        for (int i = 0; i < TEAM_SIZE; i++)
+        {
+            printf("%d. %s - HP: %d/%d",
+                   i + 1,
+                   opponent->units[i].name,
+                   opponent->units[i].hp,
+                   MAX_HP);
+
+            if (opponent->units[i].hp <= 0)
+                printf(" [DEFEATED]");
+
+            printf("\n");
+        }
+
+        int choice = readIntRange("Choose target: ", 1, TEAM_SIZE);
+
+        if (opponent->units[choice - 1].hp > 0)
+            return choice - 1;
+
+        printf("That character has already been defeated!\n");
+    }
+}
+
+// Determine normal attack damage based on role.
+static int getNormalDamage(Role role)
+{
+    switch (role)
+    {
+        case DPS:      return 200;
+        case SUB_DPS:  return 150;
+        case SUPPORT:  return 100;
+        case SUSTAIN:  return 100;
+        default:       return 0;
+    }
+}
+
+// Calculate damage and apply it to the enemy.
+static void dealDamage(
+    Player *attacker,
+    Player *defender,
+    int targetIndex,
+    int baseDamage)
+{
+    Unit *target = &defender->units[targetIndex];
+
+    int damage = baseDamage;
+
+    // Apply an active damage buff.
+    if (attacker->damageBuffAttacks > 0)
+    {
+        damage = damage * 125 / 100;
+        attacker->damageBuffAttacks--;
+
+        printf("\nDamage buff activated! Increased damage: %d\n",
+               damage);
+    }
+
+    // Prevent damage from exceeding remaining HP.
+    if (damage > target->hp)
+        damage = target->hp;
+
+    target->hp -= damage;
+
+    printf("\n%s deals %d damage to %s's %s!\n",
+           attacker->name,
+           damage,
+           defender->name,
+           target->name);
+
+    printf("%s's remaining HP: %d/%d\n",
+           target->name,
+           target->hp,
+           MAX_HP);
+
+    if (target->hp <= 0)
+    {
+        printf("\n*** %s has been defeated! ***\n", target->name);
+    }
+}
+
+// Restore HP to every living character on the player's team.
+static void healTeam(Player *player, int healAmount)
+{
+    printf("\n%s activated Party Healing!\n", player->name);
+
+    for (int i = 0; i < TEAM_SIZE; i++)
+    {
+        Unit *unit = &player->units[i];
+
+        if (unit->hp <= 0)
+            continue;
+
+        int previousHP = unit->hp;
+
+        unit->hp += healAmount;
+
+        if (unit->hp > MAX_HP)
+            unit->hp = MAX_HP;
+
+        int actualHealing = unit->hp - previousHP;
+
+        printf("%s restored %d HP. Current HP: %d/%d\n",
+               unit->name,
+               actualHealing,
+               unit->hp,
+               MAX_HP);
+    }
+}
+
 void GirlsFrontline()
 {
     char *P[5] = {"M1911", "PPK", "Glock 17", "Colt Revolver", "Contender"};
@@ -103,139 +433,309 @@ void GirlsFrontline()
     printf("\n");
 }
 
-const char *weightedPull(const char *pool[],
-                         const int rates[],
-                         int count)
-{
-    int totalWeight = 0;
-
-    // Calculate the total probability weight.
-    for (int i = 0; i < count; i++)
-    {
-        if (rates[i] > 0)
-            totalWeight += rates[i];
-    }
-
-    if (totalWeight <= 0)
-        return NULL;
-
-    // Generate a random number within the total weight.
-    int roll = rand() % totalWeight;
-
-    // Determine which character corresponds to the roll.
-    for (int i = 0; i < count; i++)
-    {
-        if (rates[i] <= 0)
-            continue;
-
-        if (roll < rates[i])
-            return pool[i];
-
-        roll -= rates[i];
-    }
-
-    return NULL;
-}
-
-
 void GenshinImpact()
 {
-    const char *DPS[4] = {
+    // Character pools: weakest to strongest.
+    static const char *const DPS_POOL[4] = {
         "Hu Tao", "Wanderer", "Mavuika", "Flins"
     };
 
-    const char *Sub_DPS[4] = {
+    static const char *const SUB_DPS_POOL[4] = {
         "Kaeya", "Yelan", "Ineffa", "Traveler"
     };
 
-    const char *Sup[4] = {
+    static const char *const SUPPORT_POOL[4] = {
         "Bennett", "Nicole", "Durin", "Columbina"
     };
 
-    const char *Sus[4] = {
+    static const char *const SUSTAIN_POOL[4] = {
         "Barbara", "Kokomi", "Zhongli", "Furina"
     };
 
-    // Drop rates correspond to array positions.
+    // Initial drop rates.
     const int dropRates[4] = {40, 30, 20, 10};
 
-    const char *Squad[4] = {NULL};
-    int Gacha[4] = {0};
-    int Choice;
-    bool Repeat;
+    // Initialize both players.
+    Player players[2] = {0};
 
-    printf("Select 4 Between DPS(1), Sub-DPS(2), Support(3), Sustain(4)\n");
-    printf("DPS\n");
-    printf("Sub-DPS\n");
-    printf("Support\n");
-    printf("Sustain\n");
+    players[0].name = "Player 1";
+    players[1].name = "Player 2";
 
-    // Selection for Units
-    for (int i = 0; i < 4; i++)
+    // ==============================
+    // CHARACTER ROLLING
+    // ==============================
+
+    for (int p = 0; p < 2; p++)
     {
-        printf("Selected Unit: ");
-        scanf("%d", &Choice);
+        printf("\n====================================\n");
+        printf("          %s GACHA\n", players[p].name);
+        printf("====================================\n");
 
-        while (Choice < 1 || Choice > 4)
+        for (int i = 0; i < TEAM_SIZE; i++)
         {
-            printf("Please choose from 1 to 4: ");
-            scanf("%d", &Choice);
+            printf("\nSelect character category:\n");
+            printf("1. DPS\n");
+            printf("2. Sub-DPS\n");
+            printf("3. Support\n");
+            printf("4. Sustain\n");
+
+            int choice = readIntRange("Your choice: ", 1, 4);
+
+            const char *const *pool = NULL;
+
+            switch (choice)
+            {
+                case DPS:
+                    pool = DPS_POOL;
+                    break;
+
+                case SUB_DPS:
+                    pool = SUB_DPS_POOL;
+                    break;
+
+                case SUPPORT:
+                    pool = SUPPORT_POOL;
+                    break;
+
+                case SUSTAIN:
+                    pool = SUSTAIN_POOL;
+                    break;
+            }
+
+            // Perform weighted character pull.
+            Unit *newUnit = &players[p].units[i];
+
+            newUnit->name = weightedPullUnique(
+                pool,
+                dropRates,
+                TEAM_SIZE,
+                players[p].units,
+                i
+            );
+
+            if (newUnit->name == NULL)
+            {
+                printf("Unable to generate character.\n");
+                return;
+            }
+
+            newUnit->role = (Role)choice;
+            newUnit->hp = MAX_HP;
+            newUnit->skillUsed = false;
+
+            printf("\n%s pulled: %s!\n",
+                   players[p].name,
+                   newUnit->name);
+
+            printf("Slots Filled: %d/%d\n",
+                   i + 1,
+                   TEAM_SIZE);
         }
 
-        Gacha[i] = Choice;
-        printf("Slots Filled %d/4\n", i + 1);
+        printf("\n%s has completed their team!\n",
+               players[p].name);
+
+        printTeam(&players[p]);
     }
 
-    // Gacha
-    for (int i = 0; i < 4; i++)
+    // ==============================
+    // COIN FLIP
+    // ==============================
+
+    printf("\n====================================\n");
+    printf("             COIN FLIP\n");
+    printf("====================================\n");
+
+    int currentPlayer = rand() % 2;
+
+    if (currentPlayer == 0)
+        printf("The coin landed on HEADS!\n");
+    else
+        printf("The coin landed on TAILS!\n");
+
+    printf("%s will make the first move!\n",
+           players[currentPlayer].name);
+
+    // ==============================
+    // COMBAT SYSTEM
+    // ==============================
+
+    int turnNumber = 1;
+
+    while (hasLivingUnits(&players[0]) &&
+           hasLivingUnits(&players[1]))
     {
-        do
+        Player *attacker = &players[currentPlayer];
+        Player *defender = &players[1 - currentPlayer];
+
+        printf("\n\n====================================\n");
+        printf("               TURN %d\n", turnNumber);
+        printf("====================================\n");
+
+        printf("%s's turn!\n", attacker->name);
+
+        printTeam(attacker);
+
+        // Select the active character.
+        int unitIndex = chooseLivingUnit(attacker);
+
+        Unit *unit = &attacker->units[unitIndex];
+
+        printf("\nSelected: %s (%s)\n",
+               unit->name,
+               getRoleName(unit->role));
+
+        // Choose an action.
+        int action;
+
+        if (unit->skillUsed)
         {
-            Repeat = false;
+            printf("\nElemental Skill already used.\n");
+            printf("1. Normal Attack\n");
 
-            if (Gacha[i] == 1)
-            {
-                Squad[i] = weightedPull(DPS, dropRates, 4);
-            }
-            else if (Gacha[i] == 2)
-            {
-                Squad[i] = weightedPull(Sub_DPS, dropRates, 4);
-            }
-            else if (Gacha[i] == 3)
-            {
-                Squad[i] = weightedPull(Sup, dropRates, 4);
-            }
-            else
-            {
-                Squad[i] = weightedPull(Sus, dropRates, 4);
-            }
+            action = readIntRange("Choose move: ", 1, 1);
+        }
+        else
+        {
+            printf("\nAvailable Moves:\n");
+            printf("1. Normal Attack\n");
+            printf("2. Elemental Skill\n");
 
-            // Prevent duplicate characters.
-            for (int j = 0; j < i; j++)
+            action = readIntRange("Choose move: ", 1, 2);
+        }
+
+        // ==============================
+        // NORMAL ATTACK
+        // ==============================
+
+        if (action == 1)
+        {
+            int targetIndex = chooseLivingTarget(defender);
+
+            int damage = getNormalDamage(unit->role);
+
+            dealDamage(
+                attacker,
+                defender,
+                targetIndex,
+                damage
+            );
+        }
+
+        // ==============================
+        // ELEMENTAL SKILL
+        // ==============================
+
+        else if (action == 2)
+        {
+            // Each character can use their skill once per match.
+            unit->skillUsed = true;
+
+            switch (unit->role)
             {
-                if (strcmp(Squad[j], Squad[i]) == 0)
+                case DPS:
                 {
-                    Repeat = true;
+                    printf("\n%s uses their Elemental Skill!\n",
+                           unit->name);
+
+                    int targetIndex = chooseLivingTarget(defender);
+
+                    dealDamage(
+                        attacker,
+                        defender,
+                        targetIndex,
+                        350
+                    );
+
+                    break;
+                }
+
+                case SUB_DPS:
+                {
+                    printf("\n%s uses their Elemental Skill!\n",
+                           unit->name);
+
+                    int targetIndex = chooseLivingTarget(defender);
+
+                    dealDamage(
+                        attacker,
+                        defender,
+                        targetIndex,
+                        300
+                    );
+
+                    break;
+                }
+
+                case SUPPORT:
+                {
+                    printf("\n%s uses their Elemental Skill!\n",
+                           unit->name);
+
+                    attacker->damageBuffAttacks = 2;
+
+                    printf("%s's party gained a 25%% damage buff!\n",
+                           attacker->name);
+
+                    printf("The next two damage-dealing attacks "
+                           "will receive the buff.\n");
+
+                    break;
+                }
+
+                case SUSTAIN:
+                {
+                    printf("\n%s uses their Elemental Skill!\n",
+                           unit->name);
+
+                    healTeam(attacker, 200);
+
                     break;
                 }
             }
+        }
 
-        } while (Repeat);
+        // ==============================
+        // END OF TURN
+        // ==============================
+
+        printf("\n---------- END OF TURN ----------\n");
+
+        printTeam(&players[0]);
+        printTeam(&players[1]);
+
+        // Check if either team has been defeated.
+        if (!hasLivingUnits(defender))
+            break;
+
+        // Alternate players.
+        currentPlayer = 1 - currentPlayer;
+        turnNumber++;
     }
 
-    // Show Gacha
-    printf("\nCongratulations!\n");
-    printf("Your Units are: ");
+    // ==============================
+    // MATCH RESULT
+    // ==============================
 
-    for (int i = 0; i < 4; i++)
+    printf("\n\n====================================\n");
+    printf("             MATCH OVER\n");
+    printf("====================================\n");
+
+    if (hasLivingUnits(&players[0]))
     {
-        printf("%s", Squad[i]);
-
-        if (i < 3)
-            printf(", ");
+        printf("VICTORY! PLAYER 1 WINS!\n");
+        printf("Congratulations, Player 1!\n");
+    }
+    else
+    {
+        printf("VICTORY! PLAYER 2 WINS!\n");
+        printf("Congratulations, Player 2!\n");
     }
 
-    printf("\n");
+    printf("\nFinal Team Status:\n");
+
+    printTeam(&players[0]);
+    printTeam(&players[1]);
 }
 
 
