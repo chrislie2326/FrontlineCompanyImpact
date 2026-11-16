@@ -541,27 +541,35 @@ static int client_game(int fd)
 
 int main(int argc, char **argv)
 {
-    if (argc != 3 && argc != 4) {
+    if (argc != 3 && argc != 4) { // Checks if  the user correctly enters 3 or 4 arguments
         fprintf(stderr, "Usage: %s host PORT | %s join HOST_IP PORT\n", argv[0], argv[0]);
         return 1;
     }
-    char *end;
-    const char *port_text = argc == 3 ? argv[2] : argv[3];
-    long port = strtol(port_text, &end, 10);
-    if (!*port_text || *end || port < 1 || port > 65535) {
+    char *end; // An integral variable for the succeeding strtol() function
+    const char *port_text = argc == 3 ? argv[2] : argv[3]; // First storage for the inputted port number, inside a string literal.
+    long port = strtol(port_text, &end, 10); // This is where the inputted port number is then stored in the long variable `port`
+
+    if (!*port_text || *end || port < 1 || port > 65535) { // Checks if inputted port is valid. Refer to Canvas Documentation for details.
         fputs("Invalid port.\n", stderr); return 1;
     }
-    int is_host = argc == 3 && strcmp(argv[1], "host") == 0;
-    int is_client = argc == 4 && strcmp(argv[1], "join") == 0;
-    if (!is_host && !is_client) {
+
+    int is_host = argc == 3 && strcmp(argv[1], "host") == 0; // Assigns `1` if command executed is valid and entered by Host. Otherwise, `0`.
+    int is_client = argc == 4 && strcmp(argv[1], "join") == 0; // Assigns `1` if command executed is valid and entered by Client. Otherwise, `0`.
+
+    if (!is_host && !is_client) { // Checks if command is invalid
         fputs("Expected host or join mode.\n", stderr); return 1;
     }
-    signal(SIGPIPE, SIG_IGN);
-    int fd = is_host ? create_server((unsigned short)port) : join_server(argv[2], (unsigned short)port);
-    if (fd < 0) { perror("Connection setup failed"); return 1; }
+
+    signal(SIGPIPE, SIG_IGN); // Ignore SIGPIPE signal by Operating System
+    int fd = is_host ? create_server((unsigned short)port) : join_server(argv[2], (unsigned short)port); // Identifier for socket within the process. Depends on whether user is Host or Client.
+
+    if (fd < 0) { perror("Connection setup failed"); return 1; } // Return error if fd is invalid
+
     puts("Connected!");
     int result = is_host ? host_game(fd) : client_game(fd);
+
     if (result < 0) fputs("Game stopped: disconnect, invalid message, or input ended.\n", stderr);
+
     close(fd);
     return result < 0 ? 1 : 0;
 }
